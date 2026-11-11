@@ -7,7 +7,7 @@
 
 ## Quick start (local dev)
 
-**Requirements:** Node.js 20+, npm, build tools for `better-sqlite3` (Python 3, make, g++).
+**Requirements:** Node.js **22+** (see `.nvmrc`; matches `cookie@2.x` via Fastify’s `light-my-request`), npm, build tools for `better-sqlite3` (Python 3, make, g++).
 
 ```bash
 npm ci
@@ -34,6 +34,7 @@ npm run typecheck     # TypeScript across packages
 npm run lint          # ESLint (api + web)
 npm run build         # shared → api → web
 npm run db:seed       # reset SQLite file and re-seed fixtures
+npm run audit:check   # CI policy: fail on prod critical/high (see docs/SECURITY-AUDIT.md)
 ```
 
 ### Docker demo
@@ -78,6 +79,10 @@ flowchart LR
 5. **Zod on inputs** — Bounded query params (`limit` ≤ 100) and login body size.
 6. **Idempotency table** — Stores first replay result; duplicates return same payload with `duplicate: true` without double audit side effects (audit written once).
 7. **Explicit synthetic banner** — UI banner + overview note + seed audit entry document data lineage.
+
+## Security / dependency audit
+
+Production install (`npm ci --omit=dev`) is gated in CI by `npm run audit:check`. Dev-only tooling (Vitest/tinypool, ESLint/minimatch) may still report advisories — see [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) for paths, before/after counts, and residual risk.
 
 ## Known limitations
 
