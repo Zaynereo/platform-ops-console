@@ -7,7 +7,7 @@
 
 ## Quick start (local dev)
 
-**Requirements:** Node.js **22+** (see `.nvmrc`; matches `cookie@2.x` via Fastify’s `light-my-request`), npm, build tools for `better-sqlite3` (Python 3, make, g++).
+**Requirements:** Node.js **22+** (see `.nvmrc`; matches `cookie@2.0.2` from **`@fastify/cookie`** and Fastify deps), npm, build tools for `better-sqlite3` (Python 3, make, g++).
 
 ```bash
 npm ci
@@ -82,7 +82,7 @@ flowchart LR
 
 ## Security / dependency audit
 
-Production install (`npm ci --omit=dev`) is gated in CI by `npm run audit:check`. Dev-only tooling (Vitest/tinypool, ESLint/minimatch) may still report advisories — see [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) for paths, before/after counts, and residual risk.
+CI runs `npm run audit:check` (fails on any critical/high in full or production trees). **Moderate** lint-chain advisories may remain — see [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) for paths, counts, and boundaries.
 
 ## Known limitations
 

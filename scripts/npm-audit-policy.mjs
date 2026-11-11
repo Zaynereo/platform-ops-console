@@ -1,14 +1,23 @@
 #!/usr/bin/env node
 /**
- * CI audit gate: fail on critical/high in production dependency tree.
- * Dev-only findings are reported but do not fail the build (see SECURITY-AUDIT.md).
+ * CI audit gate: fail if npm audit reports critical or high in any OR production tree.
+ * Moderate findings may remain (documented in docs/SECURITY-AUDIT.md).
  */
 import { execSync } from "node:child_process";
 
 function runAudit(omitDev) {
   const flag = omitDev ? "--omit=dev" : "";
-  const raw = execSync(`npm audit ${flag} --json`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
-  return JSON.parse(raw);
+  try {
+    const raw = execSync(`npm audit ${flag} --json`, {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return JSON.parse(raw);
+  } catch (err) {
+    const stdout = err.stdout?.toString();
+    if (!stdout) throw err;
+    return JSON.parse(stdout);
+  }
 }
 
 function summarize(label, audit) {
@@ -19,47 +28,25 @@ function summarize(label, audit) {
   return v;
 }
 
-let all;
-let prod;
-try {
-  all = runAudit(false);
-} catch (err) {
-  const stdout = err.stdout?.toString();
-  if (!stdout) {
-    console.error(err.stderr?.toString() ?? err.message);
-    process.exit(1);
-  }
-  all = JSON.parse(stdout);
-}
-
-try {
-  prod = runAudit(true);
-} catch (err) {
-  const stdout = err.stdout?.toString();
-  if (!stdout) {
-    console.error(err.stderr?.toString() ?? err.message);
-    process.exit(1);
-  }
-  prod = JSON.parse(stdout);
-}
-
+const all = runAudit(false);
+const prod = runAudit(true);
 const allV = summarize("all", all);
 const prodV = summarize("production", prod);
 
-if (prodV.critical > 0) {
-  console.error("Failing: production dependency tree has critical advisories.");
-  process.exit(1);
+let failed = false;
+
+if (prodV.critical > 0 || prodV.high > 0) {
+  console.error("Failing: production tree has critical/high advisories.");
+  failed = true;
 }
 
-if (prodV.high > 0) {
-  console.error("Failing: production dependency tree has high advisories (see SECURITY-AUDIT.md).");
-  process.exit(1);
+if (allV.critical > 0 || allV.high > 0) {
+  console.error("Failing: full dependency tree has critical/high advisories.");
+  failed = true;
 }
 
-if (allV.critical > 0) {
-  console.warn(
-    "Warning: dev/test dependency tree still has critical advisories — documented residual risk."
-  );
+if (allV.moderate > 0) {
+  console.warn(`Note: ${allV.moderate} moderate advisories remain — see docs/SECURITY-AUDIT.md.`);
 }
 
-process.exit(0);
+process.exit(failed ? 1 : 0);

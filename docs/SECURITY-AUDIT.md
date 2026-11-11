@@ -1,41 +1,41 @@
 # Dependency audit notes
 
-Counts from `npm audit` after `npm ci` — re-run locally to refresh.
+Counts from `npm audit` after `npm ci`. Policy: `npm run audit:check` (fails on **any** critical/high in full or production trees).
 
-## Before / after (main @ `b723f57` → remediation branch)
+## Audit timeline
 
-| Scope | Before | After | Notes |
-|-------|--------|-------|-------|
-| **All deps** | 22 total — 2 critical, 7 high, 11 moderate, 2 low | 10 total — 2 critical, 0 high, 8 moderate, 0 low | Critical dev-only (`tinypool` via Vitest 3.x) remains |
-| **Production** (`--omit=dev`) | 8 total — 0 critical, 6 high, 2 moderate | **0** | Fastify, static, React Router, Zod, Vite runtime paths upgraded |
+| Milestone | All deps | Production (`--omit=dev`) |
+|-----------|----------|---------------------------|
+| main @ `b723f57` | 22 — 2 crit, 7 high, 11 mod, 2 low | 8 — 6 high, 2 mod |
+| PR #2 first pass @ `57194cb` | 10 — 2 crit, 0 high, 8 mod | **0** |
+| PR #2 + Vitest 5 @ current | **7 moderate only** | **0** |
 
-**Not claimed as “fixed” because tests pass** — production tree is clean per `npm audit --omit=dev`; full tree still lists dev-toolchain advisories with no non-breaking npm fix (Vitest → 5.x would be a major test-runner migration; Vitest 4.x hit an npm peer-resolution error in this workspace).
+Critical/high cleared by upgrading runtime packages (Fastify stack, React Router, Zod 4, Vite) and **Vitest 5.1.0** (removes `tinypool` / vulnerable `@vitest/mocker` path from Vitest 3.x). **Passing CI does not mean zero advisories** — 7 **moderate** items remain.
 
-## Policy (`npm run audit:check`)
+## Residual moderate (honest boundary)
 
-| Scope | CI behavior |
-|-------|-------------|
-| **Production** (`npm audit --omit=dev`) | **Fail** on `critical` or `high` |
-| **All dependencies** | Report counts; dev `critical` may remain documented |
+| Advisory | Path | Exposure |
+|----------|------|----------|
+| `minimatch` ReDoS/DoS (GHSA-g3hv-75wg-m249) | `typescript-eslint` → `@typescript-eslint/typescript-estree` → `minimatch@9.x` | **Lint/dev only** — not loaded by API or production bundle; npm reports no fixed `typescript-eslint` release without downgrade |
 
-Passing `audit:check` means production tree met the gate at lockfile time — **not** a guarantee every transitive dev tool advisory is eliminated.
+No `npm audit ignore` entries. No overrides that hide audit IDs.
 
-## Node.js `cookie@2.x` engine
+## `cookie` package paths (verified via `npm ls cookie`)
 
-`fastify` → `light-my-request` depends on `cookie@2.x`, which declares `engines.node: >=22`. The repo pins **Node 22** (`.nvmrc`, `package.json` `engines`, Docker) so CI matches runtime declarations.
+| Version | Introduced by | Used for |
+|---------|---------------|----------|
+| `cookie@2.0.2` | **`@fastify/cookie`** (registered in `app.ts` for session cookies) | **Primary auth session path** |
+| `cookie@2.0.2` | `fastify` → `light-my-request` (deduped) | Fastify HTTP test/inject helpers; same major as server cookie parsing — **not** the separate SPA router |
+| `cookie@1.1.1` | `react-router` (web production dep) | Client router cookie utilities |
 
-## Runtime relevance (before remediation baseline)
+Node **22+** is required because `cookie@2.0.2` declares `engines.node: '>=22'`, pulled by **`@fastify/cookie`** and Fastify’s dependency chain.
 
-| Advisory bucket | Typical path | Runtime exposure in this repo |
-|-----------------|--------------|------------------------------|
-| `tinypool` / `vitest` critical | dev test runner | **None** in production deploy (tests only) |
-| `esbuild` moderate | Vite/tsx dev servers | **None** in production API process |
-| `eslint` / `minimatch` | lint | **None** at runtime |
-| `fastify` / `@fastify/static` | API + Docker static | **Yes** — upgraded intentionally |
-| `react-router` / `zod` | browser + request validation | **Yes** — upgraded intentionally |
+## Vitest 5 migration notes
 
-## Residual risk (honest)
+- Both workspaces use `vitest@5.1.0` with `vite@6.4.6` (root `overrides` prevent npm from resolving Vitest’s optional `vite@8` peer during install).
+- `packages/api` adds `vite` devDependency for Vitest’s runner.
+- `vitest.config.ts` **`include: src/**`** — Vitest 5 otherwise re-ran compiled `dist/*.test.js`, doubling tests (8 → 13).
 
-After supported upgrades, some advisories may remain where npm reports **no fixed version** (e.g. certain `minimatch` paths inside ESLint tooling) or where fixes require major migrations we deferred. Those are **dev-toolchain** or **low practical risk** for this demo’s threat model — still listed by `npm audit` until upstream publishes fixes.
+## Policy script
 
-See PR description for **before/after** vulnerability counts.
+`scripts/npm-audit-policy.mjs` exits non-zero on critical/high in **either** full or production audits; warns on moderate count only.
